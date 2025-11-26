@@ -96,8 +96,11 @@ module Bundler
     check_unknown_options!(except: [:config, :exec])
     stop_on_unknown_option! :exec
 
-    desc "cli_help", "Prints a summary of bundler commands", hide: true
-    def cli_help
+    desc "install_or_cli_help", "Tries to run bundle install but prints a summary of bundler commands if there is no Gemfile", hide: true
+    def install_or_cli_help
+      invoke_other_command("install")
+    rescue GemfileNotFound => error
+      Bundler.ui.error error.message, wrap: true
       version
       Bundler.ui.info "\n"
 
@@ -123,7 +126,7 @@ module Bundler
     def self.default_command(meth = nil)
       return super if meth
 
-      Bundler.settings[:default_cli_command] || "install"
+      Bundler.settings[:default_cli_command] || "install_or_cli_help"
     end
 
     class_option "no-color", type: :boolean, desc: "Disable colorization in output"
@@ -506,7 +509,7 @@ module Bundler
 
     desc "version", "Prints Bundler version information"
     def version
-      cli_help = current_command.name == "cli_help"
+      cli_help = current_command.name == "install_or_cli_help"
       if cli_help || ARGV.include?("version")
         build_info = " (#{BuildMetadata.timestamp} commit #{BuildMetadata.git_commit_sha})"
       end
@@ -711,6 +714,19 @@ module Bundler
     def current_command
       _, _, config = @_initializer
       config[:current_command]
+    end
+
+    def invoke_other_command(name)
+      _, _, config = @_initializer
+      original_command = config[:current_command]
+      command = self.class.all_commands[name]
+      config[:current_command] = command
+      send(name)
+    ensure
+      config[:current_command] = original_command
+    end
+
+    def current_command=(command)
     end
 
     def print_command
